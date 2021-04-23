@@ -6,7 +6,7 @@
 }
 
 # use gdal to calculate topography from DEM
-  dem_fp = 'C:/LocalProjects/FtKeoghMapping/SpatialData/DEM'
+  dem_fp = 'D:/DEM/NPS'
   ftk_dem <- raster(file.path(dem_fp, 'ftk_cropped.tif'))
   # Aspect
     aspect <- gdaldem(

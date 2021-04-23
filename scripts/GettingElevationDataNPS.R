@@ -16,8 +16,8 @@ cores=detectCores()
   registerDoParallel(cl)
   begin = Sys.time()
   
-    foreach(p=1:length(gp_nps_sf$unit), 
-            .combine=bind_rows) %dopar% {
+    foreach(p=1:length(gp_nps_sf$unit)) 
+    %dopar% {
       pacman::p_load(tidyverse, sf)
       p_sf <-  
         gp_nps_sf %>%
@@ -28,7 +28,7 @@ cores=detectCores()
                                  clip = 'bbox', 
                                  verbose = F, 
                                  override_size_check = T) %>%
-        raster::writeRaster(paste0('S:/DevanMcG/GIS/SpatialData/GreatPlains/DEM/', 
+        raster::writeRaster(paste0('D:/DEM/NPS/', 
                                    str_replace_all(p_sf$unit, " ", "_"), '.tif'))
             }
     beepr::beep() 
