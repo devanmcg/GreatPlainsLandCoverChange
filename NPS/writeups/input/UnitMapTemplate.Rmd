@@ -1,0 +1,306 @@
+---
+params:
+   new_title: "My Title!"
+title: "`r params$new_title`"
+author: "Devan McGranahan"
+date: "`r Sys.Date()`"
+output:
+ pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=F, message=F, results='hide', warning=F, fig.height=9)
+pacman::p_load(tidyverse, sf, pander, grid, gridExtra, ggvoronoi)
+source('https://raw.githubusercontent.com/devanmcg/rangeR/master/R/CustomGGplotThemes.R')
+
+d <- data %>% filter(unit ==  u) 
+U <- 
+  SampleUnits %>%
+  filter(unit ==  u) %>%
+  st_transform(albersEAC) 
+
+c <- d %>%
+  as_tibble() %>%
+  filter(unit == u) %>%
+  group_by(unit) %>%
+  summarize(count = length(unique(point)))
+```
+
+I am studying vegetation trends in US National Park Service units of the Great Plains from 1985-2020, based on remotely-sensed data available online through the [Rangeland Analysis Platform](https://rangelands.app/) (RAP). 
+The study focuses on areas that were primarily tree-free at the beginning of the study period (< 5% tree cover in 1985) and tracks trends in three cover classes--Perennial forbs & grasses, Annual forbs & grasses, and Trees--and annual primary production of the same perennial and annual herbaceous groups. 
+
+The primary research questions are: 
+
+1. Has herbaceous and tree cover changed on these NPS units over 40 years? And if so, how?
+2. Which environmental variables (soils, slope, aspect) are associated with vegetation changes?
+3. Are short- and long-term trends in the RAP data consistent with known management, climate, or other factors at the unit level? 
+
+I am sharing results of #1 with you to see if you can provide any insight into #3.
+Obviously, it is one thing to identify patterns of vegetation change over several decades, but quite another to understand the reasons behind those changes. 
+Employees at the unit level have the best insight into specific climatic and management events that affect vegetation, and I hope we can discuss what might have been at play at `r c$unit` to account for the variability or stability seen in these data. 
+
+Sincerely, 
+
+Devan Allen McGranahan  
+USDA Agricultural Research Service  
+Miles City, MT
+
+
+**About this study**
+
+*Getting data*
+
+For each NPS unit, I ranked ecological sites by their relative abundance, and included those that added up to at least 75% of each unit's total area. 
+Then, using a grid pattern, I used a GIS tool to create sample points that maintained at least 200 m separation and were 200 m from a property or ecological site boundary, not to exceed 50% of the total area of the dominant ecological sites. 
+For `r c$unit`, this generated `r c$count` points.
+Using another GIS tool, I then found the mean value from the four RAP cells nearest each point, which represents 120 m\textsuperscript{2} per point. 
+
+From these same points, I found the ecological site classification (which was assigned to a broader Ecological Site Group for consistency across the Plain), slope, and aspect. 
+
+*Data analysis*
+
+Vegetation trends for the entire period were summarized using Kendall's tau statistic for trend analysis, fit for each data type at each point. 
+The tau value was then fit as the response variable in regression models that tested for the importance of ecological sites, slope, and aspect on the rate of vegetation change.
+
+\clearpage
+
+```{r, fig.keep = 'last', fig.height = 8, fig.cap = "Sample points plotted by ecological site group and slope, which along with aspect were used in determining factors associated with highest rates of change in vegetation among Great Plains NPS units. "}
+
+# Eco-physical maps
+EcoPhys <- 
+  d %>%
+  as_tibble() %>%
+  select(-band, -tau) %>%
+  group_by(unit, point) %>%
+  slice(1) %>%
+  ungroup() %>%
+  mutate(lat = unlist(map(.$geometry,2)),
+         long = unlist(map(.$geometry,1)), 
+         slope = case_when(
+           slope < 0.125 ~ 'Flat', 
+           between(slope, 0.125, 0.374) ~ "Gentle",
+           between(slope, 0.375, 0.624) ~ "Steep",
+           between(slope, 0.625, 0.874) ~ "Very steep",
+           slope >= 0.875 ~ "Extreme" )) 
+
+    esg_gg <-   
+      EcoPhys %>%
+      ggplot( ) + theme_map() + 
+      geom_sf(data = U) +
+      geom_point(aes(x=long, y=lat, color=esg), pch = 15) +
+      scale_color_manual("Ecological\nSite Group", 
+                        values = wes_palette(length(unique(EcoPhys$esg)), 
+                                             name = "Zissou1", 
+                                             type = "continuous")) + 
+      theme(plot.margin = margin(2,2,2,2, 'mm'))+ 
+      guides(color = guide_legend(override.aes = list(size=5)))
+    
+    # asp_gg <-   
+    #   EcoPhys %>%
+    #   filter(!is.na(aspect)) %>%
+    #   ggplot( ) + theme_map() + 
+    #   geom_sf(data = U) +
+    #   geom_point(aes(x=long, y=lat, color=aspect), pch = 15) +
+    #   scale_color_manual("Aspect", 
+    #                     values = wes_palette(4, 
+    #                                          name = "Zissou1", 
+    #                                          type = "continuous")) + 
+    #   theme(plot.margin = margin(2,2,2,2, 'mm')) + 
+    #   guides(color = guide_legend(override.aes = list(size=5)))
+    
+    slope_gg <-   
+      EcoPhys %>%
+      filter(!is.na(slope)) %>%
+      mutate(slope = factor(slope, levels = c("Flat", "Gentle", "Steep", 
+                                              "Very steep", "Extreme")) )%>%
+      ggplot( ) + theme_map() + 
+      geom_sf(data = U) +
+      geom_point(aes(x=long, y=lat, color=slope), pch = 15) +
+      scale_color_manual("Slope", 
+                        values = wes_palette(5, 
+                                             name = "Zissou1", 
+                                             type = "continuous")) + 
+      theme(plot.margin = margin(2,2,2,2, 'mm'))+ 
+      guides(color = guide_legend(override.aes = list(size=5)))
+    
+    grid.arrange(esg_gg, slope_gg, ncol = 1)
+    # grid.arrange(esg_gg, AS, ncol = 1)
+```
+
+\clearpage
+
+## Mapping vegetation changes
+
+The following maps show how vegetation cover and herbaceous productivity changed at different areas of `r c$unit` between 1985 and 2020. 
+
+```{r, fig.keep = 'last', fig.height = 10, fig.cap="The data presented are Kendall's tau, a statistical measure of positive, negative, or flat trends over time." }
+# Vegetation maps
+    d %>%
+    as_tibble() %>%
+      mutate(type = case_when(
+        band %in% c('AnnProd', 'PerProd') ~ "Production", 
+        TRUE ~ "Cover"), 
+        band = recode(band, 
+                      'AFGC' = 'Annuals',
+                      'PFGC' = 'Perennials',
+                      'AnnProd' = 'Annuals',
+                      'PerProd' = 'Perennials',
+                      'TREE' = 'Trees') ) %>% 
+      mutate(lat = unlist(map(.$geometry,2)),
+             long = unlist(map(.$geometry,1))) %>%
+      ggplot() + theme_map() + 
+      geom_sf(data = U) +
+      geom_point(aes(x=long, y=lat, color=tau)) +
+      scale_color_gradient2("Long-term\nchange", 
+                           low = wes_palette('Zissou1')[1], 
+                           mid = 'white', 
+                           high = wes_palette('Zissou1')[5], 
+                           midpoint = 0) + 
+      theme(plot.margin = margin(0,0,0,0, 'mm')) +
+  facet_wrap(~type+band, ncol = 2)
+```
+
+\clearpage
+
+## Temporal trends
+
+The following graphs show the annual values of vegetation cover and herbaceous productivity at `r c$unit` between 1985 and 2020 within the dominant groups of ecological sites. 
+
+```{r, fig.height = 6, fig.width = 7, fig.cap="Vegetation trends (1985-2020) by ecological site group."}
+CovTrend_gg <- 
+itfd %>%
+  filter(unit == u) %>%
+  mutate(type = case_when(
+         band %in% c('AnnProd', 'PerProd' ) ~ "Productivity", 
+         band %in% c("AFGC", 'PFGC', "TREE") ~ "Cover", 
+         TRUE ~ 'NA')) %>%
+  filter(type == "Cover") %>%
+  mutate(band = recode(band, 
+                       "AFGC" = "Annuals", 
+                       'PFGC' = "Perennials", 
+                       "TREE" = "Trees")) %>%
+  ggplot(aes(x = year, y = Mean)) + theme_bw(12) +
+  geom_errorbar(aes(ymin = Mean - SD, 
+                    ymax = Mean + SD, 
+                    color = band), 
+                width = 0.1) + 
+  geom_line(aes(color = band, group = band)) + 
+    geom_point(aes(fill = band, shape = band)) + 
+  labs(x = 'Year', 
+       y = "Cover\n(%, mean ± SD)") + 
+    facet_wrap(~SiteGroup) +
+  scale_shape_manual("Cover type", 
+                     values = c(21:23)) + 
+  scale_color_manual("Cover type", 
+                     values = wes_palette("GrandBudapest1")[1:3]) + 
+  scale_fill_manual("Cover type", 
+                    values = wes_palette("GrandBudapest1")[1:3])  
+
+ProdTrend_gg <- 
+  itfd %>%
+  filter(unit == u) %>%
+  mutate(type = case_when(
+    band %in% c('AnnProd', 'PerProd' ) ~ "Productivity", 
+    band %in% c("AFGC", 'PFGC', "TREE") ~ "Cover", 
+    TRUE ~ 'NA')) %>%
+  filter(type == "Productivity") %>%
+  mutate(band = recode(band, 
+                       'AnnProd' = "Annuals", 
+                       'PerProd' = "Perennials")) %>%
+  mutate(across(Mean:SE, ~ . / 2000)) %>%
+  ggplot(aes(x = year, y = Mean)) + theme_bw(12) +
+  geom_errorbar(aes(ymin = Mean - SD, 
+                    ymax = Mean + SD, 
+                    color = band), 
+                width = 0.1) + 
+  geom_line(aes(color = band, group = band)) + 
+  geom_point(aes(fill = band, shape = band) ) + 
+      geom_point(aes(fill = band, shape = band)) + 
+  labs(x = 'Year', 
+       y = "Annual production\n(t/ac, Mean ± SD)") +
+  facet_wrap(~SiteGroup) +
+  scale_shape_manual("Herbaceous\ntype", 
+                     values = c(24:25)) + 
+  scale_color_manual("Herbaceous\ntype", 
+                     values = wes_palette("GrandBudapest2")[1:2]) + 
+  scale_fill_manual("Herbaceous\ntype", 
+                    values = wes_palette("GrandBudapest2")[1:2]) 
+
+grid.arrange(CovTrend_gg, ProdTrend_gg, ncol = 1)
+```
+
+
+```{r eval = FALSE}
+ut <- 
+  UnitTau %>%
+  filter(unit == u) %>%
+  pivot_wider(names_from = 'name', 
+              values_from = 'value') %>%
+  filter(band %in% c('TREE', 'PFGC', 'AFGC'), 
+         z < 0.05, 
+         SiteGroup != 'Steep-Sided Wooded Draw') 
+
+ut_gg <- ggplot(ut) + theme_bw(14) + 
+  geom_hline(yintercept = 0, lty = 3) +
+  geom_errorbar(aes(x = SiteGroup,
+                    ymin = limits.LCL, 
+                    ymax = limits.UCL, 
+                    color = band), 
+                position = position_dodge(width = 0.25), 
+                width = 0.2) +
+  geom_point(aes(x = SiteGroup, 
+                 y = slope, 
+                 fill = band), 
+             position = position_dodge(width = 0.25), 
+             pch = 21, 
+             col = 'darkgrey', 
+             stroke = 1) + 
+  coord_flip() 
+
+tgi_gg <- 
+TreeTauUnitInts %>%
+   filter(term ==  u) %>%
+  mutate(type = str_to_title(type) )  %>%
+  ggplot(aes(x = reorder(type, estimate, max))) + theme_bw(16) +
+  geom_hline(yintercept = 0, 
+             lty = 3, 
+             color = "black") + 
+  geom_errorbar(aes(ymin = ciL, 
+                    ymax = ciU, 
+                    color = type), 
+                width = 0.1, 
+                size = 1.1,
+                position = position_dodge(width = 0.25)) + 
+  geom_point(aes(y = estimate, 
+                 fill = type, 
+                 shape = type), 
+             color = 'black', 
+             size = 3, 
+             stroke = 1,
+             position = position_dodge(width = 0.25)) +
+  labs(x = '', 
+       y = "Effect of tree cover change\non herbaceous productivity" ) + 
+  scale_shape_manual("Cover type", 
+                     values = c(21:25)) + 
+  scale_color_manual("Cover type", 
+                     values = wes_palette("GrandBudapest1")[1:2]) + 
+  scale_fill_manual("Cover type", 
+                    values = wes_palette("GrandBudapest1")[1:2]) + 
+  coord_flip() + 
+  theme(axis.text.y = element_text(color = 'black'), 
+        legend.position = 'none', 
+        panel.grid.major.y = element_blank() )
+```
+
+```{r eval = FALSE, results = 'asis', fig.height = 4}
+ifelse(length(ut$z) >= 1, 
+          plot(ut_gg), 
+          paste0('All measured responses at ', u, ' were generally stable 1985-2020.')  ) 
+```
+
+```{r eval = FALSE, fig.width = 5, fig.height = 4, results = 'asis' }
+  ifelse(length(ut$z) >= 1, 
+          plot(tgi_gg), 
+          paste('No graph presented, because there were no overall vegetation trends at', u)  ) 
+```
+
