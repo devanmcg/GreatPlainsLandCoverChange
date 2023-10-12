@@ -1,26 +1,26 @@
 # pacman::p_load(RODBC, aqp, soilDB)
 
-pacman::p_load(tidyverse, sf)
-
-gp_nps_sf <- read_sf('./SpatialData/GreatPlainsNPS/NPSunitsForAnalysis', 
-                     'gp_nps_LL')
-
-pacman::p_load(foreach, doParallel)
-cores=detectCores()
+pacman::p_load(tidyverse, sf, foreach, doSNOW)
 
 {
-cl <- makeCluster(cores[1]) 
-registerDoParallel(cl)
-begin = Sys.time()
-
-AllUnits <-
-  foreach(p=1:length(gp_nps_sf$unit), 
-          .combine=bind_rows) %dopar% {
-  pacman::p_load(tidyverse, sf)
-# Get just one feature from shp
-  p_sf <-  
-    gp_nps_sf %>%
-      slice(p) 
+  gp_nps_ll <- read_sf('./SpatialData/GreatPlainsNPS/NPSunitsForAnalysis', 
+                           'gp_nps_LL')
+  
+  begin = Sys.time()
+  cores = parallel::detectCores()
+  cl <- makeSOCKcluster(cores) 
+  registerDoSNOW(cl)
+  clusterCall(cl, function(x) .libPaths(x), .libPaths())
+  
+  AllUnits <-
+    foreach(p=1:length(unique(gp_nps_ll$unit)), 
+            .combine=bind_rows, 
+            .packages=c('tidyverse', 'sf')) %dopar% {
+              
+              # Get just one feature from shp
+              p_sf <-  
+                gp_nps_ll %>%
+                filter( unit == unit[p])   
 # Fetch map units for the feature
   mukey_sf <-
     p_sf %>%
@@ -80,18 +80,22 @@ unit_data <-
     by = c("mukey", "comppct_r", "compname")) %>%
  ungroup() %>% 
  rename(site = ecoclassname) %>%
+  mutate(unit = unique(p_sf$unit)) %>%
  full_join(mukey_sf, .) 
           }
-  beepr::beep() 
-  stopCluster(cl)
-  Sys.time() - begin
-}
 
-AllUnits <- 
-  AllUnits %>%
+  stopCluster(cl)
+  
+  AllUnits <- 
+    AllUnits %>%
     rename(sand = sandtotal_r, 
            silt = silttotal_r, 
            clay = claytotal_r)
+  beepr::beep() 
+  Sys.time() - begin
+}
+
+
 
 AllUnits %>%
   st_write('./SpatialData/GreatPlainsNPS/SoilTextureEcoSite/nps_soils.shp', 

@@ -12,7 +12,7 @@ gp_sf <-
   filter(NA_L1NAME == 'GREAT PLAINS')
 
 albersEAC <- st_crs(gp_sf)
-save(albersEAC, file = './albersEAC.Rdata')
+# save(albersEAC, file = './albersEAC.Rdata')
 
 
 gp_nps <- 
@@ -28,6 +28,12 @@ gp_nps <-
   filter(Mang_Name == 'NPS') ) %>%
     st_intersection(gp_sf)
 
+gp_nps <- 
+  bind_rows(gp_nps, 
+    read_sf('S:/DevanMcG/GIS/SpatialData/US/USGS/PADUS/R5', 
+            'PADUS2_1Proclamation_Region5') %>%
+      filter(Unit_Nm == "Wind Cave National Park") )
+
 
 gp_nps <- 
   gp_nps %>%
@@ -41,24 +47,19 @@ gp_nps <-
     dplyr::filter(! unit %in% c('Padre Island National Seashore'))
 
 
-# gp_nps %>% save(file='./SpatialData/gp_nps.Rdata')
-
 # Wrangling layer for vegetation analysis
-gp_nps_sf <- read_sf('./SpatialData/GreatPlainsNPS', 
-                     'gp_nps_LL') %>%
-  select(-area) %>%
-  filter(! unit %in% c("Niobrara National Scenic River", 
-                       "Lake Meredith National Recreation Area",            
-                       "Missouri National Recreation River") ) 
-gp_nps_sf <- 
+  gp_nps_sf <-  gp_nps %>%
+    select(-area) %>%
+    filter(! unit %in% c("Niobrara National Scenic River", 
+                         "Lake Meredith National Recreation Area",            
+                         "Missouri National Recreation River") )  
+  
   gp_nps_sf %>% 
   filter(unit == "Theodore Roosevelt National Park") %>%
   st_cast(to= "POLYGON", 
           group_or_split=TRUE, 
           warn = FALSE) %>%
   mutate(unit = paste0(unit, c(' Elkhorn', ' South', ' North'))) %>%
-  bind_rows(filter(gp_nps_sf, unit != "Theodore Roosevelt National Park"))
-
-gp_nps_sf %>%
-  st_write('./SpatialData/GreatPlainsNPS/NPSunitsForAnalysis/gp_nps_LL.shp')
+  bind_rows(filter(gp_nps_sf, unit != "Theodore Roosevelt National Park")) %>%
+  st_write('./SpatialData/GreatPlainsNPS/NPSunitsForAnalysis/gp_nps_LL.shp', append = F)
   
